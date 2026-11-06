@@ -1,0 +1,105 @@
+#cloud-config
+# =============================================================================
+# A股涨停直播看板 — 云服务器首次开机初始化（cloud-init）
+# 适用：阿里云轻量应用服务器 / 腾讯云轻量应用服务器 / 其他支持 cloud-init 的
+#       Ubuntu 22.04 LTS、Ubuntu 24.04 LTS 云主机
+#
+# 使用方式（二选一）：
+#   A. 购买/重装系统时，在“用户数据 / 自定义数据”里粘贴本文件（先把 GIT_REPO 改成你的仓库地址；
+#      没有可访问仓库就留着占位符，之后用本地 ./deploy/deploy.sh deploy user@host 推送）。
+#   B. 已装好系统后手动执行：把 /etc/limitup-bootstrap.sh 的 write_files 内容复制上线执行。
+#
+# 说明：
+#   * 本文件不含任何密钥/密码；域名、访问码写在 /opt/ashare-limitup-tracker/deploy/.env
+#   * 首次启动约 3–6 分钟：装 Docker -> 拉代码 -> 构建镜像 -> 起服务
+#   * 云厂商安全组需放行 22、80、443（控制台里单独设置，cloud-init 只能管机器内 ufw）
+#   * 建议规格：2 核 2G 起（akshare + pandas 内存峰值较高，1G 机器务必用上 2G swap）
+# =============================================================================
+
+package_update: true
+package_upgrade: false
+
+packages:
+  - ca-certificates
+  - curl
+  - git
+  - rsync
+  - ufw
+  - tzdata
+
+timezone: Asia/Shanghai
+ssh_pwauth: false
+disable_root: true
+
+write_files:
+  - path: /etc/limitup-bootstrap.sh
+    permissions: '0755'
+    owner: root:root
+    content: |
+      #!/usr/bin/env bash
+      # 由 cloud-init 首次开机执行；日志：/var/log/limitup-bootstrap.log
+      set -euxo pipefail
+      exec > >(tee -a /var/log/limitup-bootstrap.log) 2>&1
+
+      echo "[limitup] bootstrap start $(date -Is)"
+
+      # 运维用户（阿里云/腾讯云 Ubuntu 默认 ubuntu；取不到则退回 root）
+      APP_USER="${APP_USER:-ubuntu}"
+      id -u "$APP_USER" >/dev/null 2>&1 || APP_USER="$(getent passwd 1000 | cut -d: -f1 || true)"
+      [ -n "${APP_USER:-}" ] || APP_USER="root"
+
+      # 1) Docker Engine + compose 插件（官方便捷脚本）
+      if ! command -v docker >/dev/null 2>&1; then
+        curl -fsSL https://get.docker.com | sh
+      fi
+      systemctl enable --now docker
+      if [ "$APP_USER" != "root" ]; then
+        usermod -aG docker "$APP_USER" || true
+      fi
+
+      # 2) 防火墙（机器内）：只放行 SSH/HTTP/HTTPS
+      ufw allow 22/tcp
+      ufw allow 80/tcp
+      ufw allow 443/tcp
+      ufw --force enable
+
+      # 3) 2G swap（内存小的实例防 OOM；已有 swap 则跳过）
+      if [ ! -f /swapfile ] && ! swapon --show | grep -q '/swapfile'; then
+        if ! fallocate -l 2G /swapfile 2>/dev/null; then
+          dd if=/dev/zero of=/swapfile bs=1M count=2048 status=none
+        fi
+        chmod 600 /swapfile
+        mkswap /swapfile
+        swapon /swapfile
+        grep -q '^/swapfile ' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
+      fi
+
+      # 4) 拉源码并部署（GIT_REPO 留空则跳过；改用本地 ./deploy.sh deploy 推送）
+      GIT_REPO="__GIT_REPO__"          # 例如 https://github.com/your-name/ashare-limitup-tracker.git
+      APP_DIR="/opt/ashare-limitup-tracker"
+      if [ -n "$GIT_REPO" ] && [ "$GIT_REPO" != "__GIT_REPO__" ]; then
+        if [ -d "$APP_DIR/.git" ]; then
+          git -C "$APP_DIR" pull --ff-only
+        else
+          git clone "$GIT_REPO" "$APP_DIR"
+        fi
+        chown -R "$APP_USER":"$APP_USER" "$APP_DIR"
+
+        # 5) 生成 .env 并部署（域名稍后改 deploy/.env 再重跑 ./deploy.sh up）
+        cd "$APP_DIR"
+        [ -f deploy/.env ] || cp deploy/.env.example deploy/.env
+        chmod 600 deploy/.env
+        ./deploy/deploy.sh up
+      else
+        echo "[limitup] 未配置 GIT_REPO，跳过代码部署。"
+        echo "[limitup] 下一步（在本地执行）："
+        echo "[limitup]   ./deploy/deploy.sh deploy ${APP_USER}@<服务器公网IP>"
+        echo "[limitup] 然后在服务器 ${APP_DIR}/deploy/.env 里配置 DOMAIN 并重跑 ./deploy.sh up"
+      fi
+
+      echo "[limitup] bootstrap done $(date -Is)"
+
+runcmd:
+  - [ bash, -lc, "/etc/limitup-bootstrap.sh" ]
+
+final_message: "A股涨停看板初始化完成（详见 /var/log/limitup-bootstrap.log）"

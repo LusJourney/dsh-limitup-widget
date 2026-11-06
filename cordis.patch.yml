@@ -1,0 +1,27 @@
+# dsh-limitup-widget bundle patch.
+# 把本插件的 Host 行插入当前 profile 的 Loader roster；config 即 lib/index.js 里
+# apply(ctx, config) 收到的第二参数。用户可在 profile 的 cordis.patch.yml 里用
+# 同 id 的 patch 条目覆盖其中任意字段（覆盖会替换整个 config，请写全量）。
+#
+# 默认值为通用配置：script 为空时不会自动拉起后端（只连 backendUrl 已有的后端）。
+# 本机自动拉起后端示例（写进 profile 的 cordis.patch.yml，按需改路径）：
+#   - id: limitup-widget
+#     config:
+#       backendUrl: http://127.0.0.1:8000
+#       autostart: true
+#       pythonBin: /path/to/venv/bin/python
+#       script: /path/to/ashare-limitup-tracker/app.py
+#       startupTimeoutMs: 45000
+#       pollTradingMs: 60000
+#       pollIdleMs: 300000
+- insert:
+    - id: limitup-widget
+      name: dsh-limitup-widget
+      config:
+        backendUrl: http://127.0.0.1:8000
+        autostart: true
+        pythonBin: python3
+        script: ''
+        startupTimeoutMs: 45000
+        pollTradingMs: 60000
+        pollIdleMs: 300000

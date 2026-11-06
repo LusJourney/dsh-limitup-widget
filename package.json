@@ -1,0 +1,65 @@
+{
+  "name": "dsh-limitup-widget",
+  "version": "0.2.1",
+  "description": "A-share limit-up live overlay card for DeepSeek Harness (DSH): counts, break rate, board height, themes and watchlist; same-origin proxy and optional Python backend autostart.",
+  "license": "MIT",
+  "author": "Luka Zhao (LusJourney)",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/client.js",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE",
+    "assets/",
+    "screenshots.json"
+  ],
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "ashare",
+    "a-share",
+    "stocks",
+    "limit-up",
+    "trading",
+    "overlay",
+    "widget"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LusJourney/dsh-limitup-widget.git"
+  },
+  "homepage": "https://github.com/LusJourney/dsh-limitup-widget#readme",
+  "bugs": {
+    "url": "https://github.com/LusJourney/dsh-limitup-widget/issues"
+  },
+  "engines": {
+    "node": ">=20",
+    "dsh": ">=0.2.0-rc.2 <0.3.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "test": "node tests/test-loader.mjs && node tests/test-node-plugin.mjs"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-layout"
+      ]
+    }
+  }
+}

@@ -1,0 +1,70 @@
+# =============================================================================
+# Caddyfile — A股涨停直播看板反向代理（Caddy v2；docker-compose 默认使用本文件）
+#
+# 站点地址由环境变量 SITE_ADDRESS 决定（docker-compose.yml 注入，默认 :80）：
+#   * 有域名：SITE_ADDRESS=https://limitup.example.com
+#       -> Caddy 自动向 Let's Encrypt 申请并续期证书（需 80/443 公网可达、DNS 已解析）
+#   * 无域名：SITE_ADDRESS=:80
+#       -> 仅 HTTP 明文，用 http://<服务器公网IP>/ 访问
+# deploy.sh 会按 .env 的 DOMAIN 自动生成 SITE_ADDRESS，一般不要手改。
+#
+# 手动运行（不在 Docker 里时）：
+#   SITE_ADDRESS=:80 caddy run --config ./Caddyfile
+# =============================================================================
+
+{
+	# 建议配置 ACME 账号邮箱（证书到期提醒，不配置也能正常签发）：
+	# email you@example.com
+}
+
+{$SITE_ADDRESS} {
+	# gzip/zstd 压缩（JSON 快照体积较大，压缩后传输快很多）
+	encode zstd gzip
+
+	# ---- 安全响应头 ----
+	header {
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		# 仅 HTTPS 下生效，浏览器对 HTTP 会忽略
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+	# 注意：page.html 内联 JS/CSS 且从 jsDelivr 加载 Chart.js，所以默认不加 CSP。
+	# 如需更严格可启用（按页面实际资源调整，否则可能导致页面白屏）：
+	# header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'"
+
+	# ---- 可选：HTTP Basic Auth（可与 app 层 LIMITUP_ACCESS_CODE 叠加） ----
+	# 生成密码哈希：
+	#   docker run --rm caddy:2-alpine caddy hash-password --plaintext 'your-password'
+	# 然后填入并取消注释（Caddy >= 2.8 指令名 basic_auth）：
+	# basic_auth {
+	# 	admin $2a$14$xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+	# }
+
+	# ---- 可选：禁止公网触发强制刷新（防止刷爆免费数据源） ----
+	# 页面右上角“刷新”按钮会调用 /api/refresh；禁用后按钮提示失败，但每分钟自动刷新不受影响。
+	# @refresh path /api/refresh
+	# respond @refresh "refresh disabled on this deployment" 403
+
+	# ---- 反向代理 ----
+	# /api/snapshot 首次加载最长约 20s，/api/refresh 最长约 30s；
+	# 不设置过短的 upstream 超时，避免冷启动 502。
+	# 限流/真实 IP：compose 默认注入 LIMITUP_TRUST_PROXY=1，Caddy 会自动转发
+	# X-Forwarded-For（app 依赖它取真实客户端 IP）；若你把 app 直接暴露公网，务必关掉该变量。
+	reverse_proxy app:8000 {
+		health_uri /api/health
+		health_interval 30s
+		health_timeout 5s
+		# 传递真实客户端 IP（app.py 若实现按 IP 限流会用到）
+		header_up X-Real-IP {remote_host}
+	}
+
+	log {
+		output stdout
+		format console
+	}
+
+	# Caddy 自带 HTTP/2、HTTP/3 与证书自动续期，无需额外配置
+}

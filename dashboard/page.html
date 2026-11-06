@@ -1,0 +1,2225 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="theme-color" content="#0d1117" />
+<title>A股涨停直播看板</title>
+<link rel="icon" href="data:," />
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
+<style>
+:root {
+  --bg: #0d1117;
+  --panel: #161b22;
+  --panel-2: #1b222c;
+  --panel-3: #212936;
+  --border: #30363d;
+  --border-soft: #232a33;
+  --text: #e6edf3;
+  --muted: #9aa4af;
+  --dim: #6e7681;
+  --up: #ff4d4f;
+  --up-strong: #ff2d2d;
+  --down: #00b578;
+  --amber: #f0a020;
+  --gold: #d29922;
+  --gold-bright: #f0c24b;
+  --blue: #58a6ff;
+  --purple: #bc8cff;
+  --teal: #22d3ee;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background:
+    radial-gradient(1100px 520px at 18% -12%, rgba(255, 77, 79, 0.07), transparent 62%),
+    radial-gradient(900px 480px at 100% 0%, rgba(88, 166, 255, 0.06), transparent 58%),
+    var(--bg);
+  background-attachment: fixed;
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: #11161d; }
+::-webkit-scrollbar-thumb { background: #30363d; border-radius: 5px; }
+::-webkit-scrollbar-thumb:hover { background: #3d444d; }
+.hidden { display: none !important; }
+#app { max-width: 1600px; margin: 0 auto; padding: 18px 22px 36px; }
+
+/* ---------- top bar ---------- */
+.topbar {
+  background: linear-gradient(180deg, #161b22 0%, #12171e 100%);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px 20px 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+}
+.topbar-main { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.brand h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: 0.5px; }
+.brand h1 .accent { color: var(--up); }
+.brand .sub { margin-top: 2px; font-size: 12px; color: var(--muted); }
+.meta { display: flex; align-items: center; gap: 8px 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); flex: 1 1 420px; }
+.meta-item { white-space: nowrap; }
+.meta-item b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+.btn {
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--panel-3);
+  border: 1px solid #3d444d;
+  border-radius: 8px;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+  white-space: nowrap;
+}
+.btn:hover:not(:disabled) { background: #2c343f; border-color: #4b5563; }
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.btn.primary { background: #a32426; border-color: #e5484d; color: #fff; }
+.btn.primary:hover:not(:disabled) { background: #bf2c2f; }
+.btn.on { background: rgba(0, 181, 120, 0.16); border-color: rgba(0, 181, 120, 0.6); color: #4ade80; }
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #1a212a;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.badge.phase.ph-trading { background: rgba(255, 77, 79, 0.14); border-color: rgba(255, 77, 79, 0.5); color: #ff8a8c; }
+.badge.phase.ph-auction { background: rgba(188, 140, 255, 0.13); border-color: rgba(188, 140, 255, 0.45); color: #cab6ff; }
+.badge.phase.ph-lunch { background: rgba(240, 160, 32, 0.13); border-color: rgba(240, 160, 32, 0.45); color: #ffc46b; }
+.badge.phase.ph-pre { background: rgba(88, 166, 255, 0.12); border-color: rgba(88, 166, 255, 0.4); color: #9ecbff; }
+.badge.phase.ph-closed { background: rgba(139, 148, 158, 0.12); border-color: rgba(139, 148, 158, 0.35); color: #b6c2d0; }
+.badge.phase.ph-holiday { background: rgba(139, 148, 158, 0.12); border-color: rgba(139, 148, 158, 0.35); color: #b6c2d0; }
+.badge.fallback { background: rgba(240, 160, 32, 0.13); border-color: rgba(240, 160, 32, 0.5); color: #ffc46b; }
+.badge.refreshing { background: rgba(88, 166, 255, 0.12); border-color: rgba(88, 166, 255, 0.45); color: #9ecbff; }
+.fallback-note {
+  margin-top: 10px;
+  padding: 7px 12px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  color: #ffc46b;
+  background: rgba(240, 160, 32, 0.08);
+  border: 1px solid rgba(240, 160, 32, 0.28);
+}
+.banner {
+  margin-top: 10px;
+  padding: 9px 13px;
+  border-radius: 8px;
+  font-size: 13px;
+  border: 1px solid;
+  overflow-wrap: anywhere;
+}
+.banner.stale { background: rgba(255, 77, 79, 0.15); border-color: rgba(255, 77, 79, 0.6); color: #ffb3b4; }
+.banner.error { background: rgba(240, 160, 32, 0.12); border-color: rgba(240, 160, 32, 0.55); color: #ffc46b; }
+.alert-strip { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.alert-head { display: flex; align-items: center; justify-content: space-between; padding: 0 2px; }
+.alert-head .alert-title { font-size: 12.5px; color: var(--muted); letter-spacing: 1px; }
+.link-btn {
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  padding: 2px 4px;
+  text-decoration: underline;
+}
+.link-btn:hover { color: var(--text); }
+.alert-item {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  border: 1px solid;
+  animation: alert-in 0.35s ease-out;
+  overflow-wrap: anywhere;
+}
+.alert-item .a-tag { flex: none; font-size: 11px; padding: 1px 7px; border-radius: 4px; font-weight: 600; }
+.alert-item .a-time { flex: none; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.alert-item.tseal { background: rgba(255, 77, 79, 0.13); border-color: rgba(255, 77, 79, 0.55); color: #ffb3b4; }
+.alert-item.tseal .a-tag { background: rgba(255, 77, 79, 0.25); color: #ff8a8c; }
+.alert-item.tbreak { background: rgba(240, 160, 32, 0.12); border-color: rgba(240, 160, 32, 0.5); color: #ffc46b; }
+.alert-item.tbreak .a-tag { background: rgba(240, 160, 32, 0.25); color: #ffc46b; }
+.alert-item.trate { background: rgba(188, 140, 255, 0.12); border-color: rgba(188, 140, 255, 0.5); color: #d4c1ff; }
+.alert-item.trate .a-tag { background: rgba(188, 140, 255, 0.25); color: #cab6ff; }
+@keyframes alert-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+
+/* ---------- stats ---------- */
+.stats { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; margin-top: 15px; }
+.stat {
+  background: var(--panel-2);
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  padding: 9px 13px 10px;
+  min-width: 0;
+}
+.stat-label { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stat-value {
+  margin-top: 3px;
+  font-size: 26px;
+  line-height: 1.15;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.stat-value.up { color: var(--up); }
+.stat-value.down { color: var(--down); }
+.stat-value.amber { color: var(--amber); }
+.stat-value.purple { color: var(--purple); }
+.stat-value.na { color: var(--dim); font-size: 15px; font-weight: 500; }
+.stat-value .stat-unit { font-size: 12px; font-weight: 500; color: var(--muted); margin-left: 3px; }
+.stat-sub { margin-top: 2px; font-size: 11px; color: var(--dim); min-height: 0; }
+.stat-sub.hidden { display: none !important; }
+
+/* ---------- panels ---------- */
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 18px 18px;
+  margin-bottom: 16px;
+}
+.panel-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 13px; }
+.panel-head h2 {
+  position: relative;
+  margin: 0;
+  padding-left: 11px;
+  font-size: 16.5px;
+  font-weight: 650;
+  letter-spacing: 0.4px;
+}
+.panel-head h2::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 3px;
+  bottom: 3px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--up);
+}
+#ladderSection h2::before { background: var(--purple); }
+#brokenSection h2::before { background: var(--amber); }
+#timelineSection h2::before { background: var(--teal); }
+#watchSection h2::before { background: var(--gold); }
+.panel-note { font-size: 12px; color: var(--dim); }
+.panel-note b { color: var(--muted); font-weight: 600; }
+
+/* ---------- theme board ---------- */
+.theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(370px, 1fr)); gap: 14px; }
+.theme-card {
+  background: var(--panel-2);
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.theme-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  background: linear-gradient(180deg, #1e2630 0%, #1a212a 100%);
+  border-bottom: 1px solid var(--border-soft);
+}
+.theme-name { font-size: 14.5px; font-weight: 650; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.theme-count { flex: none; font-size: 12px; font-weight: 650; color: #ff8a8c; background: rgba(255, 77, 79, 0.14); border-radius: 5px; padding: 1px 7px; font-variant-numeric: tabular-nums; }
+.tag-fallback {
+  flex: none;
+  font-size: 10.5px;
+  color: var(--amber);
+  border: 1px solid rgba(240, 160, 32, 0.5);
+  background: rgba(240, 160, 32, 0.1);
+  border-radius: 4px;
+  padding: 0 5px;
+  line-height: 16px;
+}
+.theme-early { margin-left: auto; flex: none; font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums; }
+.theme-body { display: flex; flex-direction: column; }
+.theme-row {
+  padding: 6px 12px 7px;
+  border-bottom: 1px solid rgba(48, 54, 61, 0.45);
+  cursor: pointer;
+  transition: background 0.12s ease;
+  min-width: 0;
+}
+.theme-row:last-child { border-bottom: 0; }
+.theme-row:hover { background: rgba(88, 166, 255, 0.07); }
+.theme-row.watched { background: rgba(210, 153, 34, 0.1); box-shadow: inset 3px 0 0 var(--gold); }
+.theme-row.watched:hover { background: rgba(210, 153, 34, 0.16); }
+.row-main { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.sname { font-size: 13.5px; font-weight: 600; color: #f0f3f6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.scode { flex: none; font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums; }
+.streak-badge { flex: none; margin-left: auto; font-size: 11px; font-weight: 650; padding: 1px 7px; border-radius: 5px; white-space: nowrap; }
+.streak-badge.s1 { color: #b6c2d0; background: rgba(139, 148, 158, 0.16); }
+.streak-badge.s2 { color: #9ecbff; background: rgba(88, 166, 255, 0.16); }
+.streak-badge.s3 { color: #7ee0cf; background: rgba(34, 211, 238, 0.15); }
+.streak-badge.s4 { color: #cab6ff; background: rgba(188, 140, 255, 0.17); }
+.streak-badge.s5 { color: #ffc46b; background: rgba(240, 160, 32, 0.18); }
+.streak-badge.s6 { color: #ff8a8c; background: rgba(255, 77, 79, 0.2); }
+.streak-badge.s-na { color: var(--dim); background: rgba(139, 148, 158, 0.1); font-weight: 500; }
+.row-sub {
+  margin-top: 3px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 11px;
+  font-size: 11px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+.sub-item b { color: var(--muted); font-weight: 500; }
+.na { color: var(--dim); font-size: 10.5px; font-weight: 400; }
+
+/* ---------- ladder ---------- */
+.ladder-wrap { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 6px; align-items: stretch; }
+.ladder-col {
+  flex: 1 0 160px;
+  min-width: 160px;
+  background: var(--panel-2);
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.ladder-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 8px 11px;
+  border-bottom: 1px solid var(--border-soft);
+  background: linear-gradient(180deg, #1e2630 0%, #1a212a 100%);
+}
+.ladder-title { font-size: 13.5px; font-weight: 650; white-space: nowrap; }
+.ladder-head .ladder-count { font-size: 11px; color: var(--dim); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ladder-head.s1 .ladder-title { color: #b6c2d0; }
+.ladder-head.s2 .ladder-title { color: #9ecbff; }
+.ladder-head.s3 .ladder-title { color: #7ee0cf; }
+.ladder-head.s4 .ladder-title { color: #cab6ff; }
+.ladder-head.s5 .ladder-title { color: #ffc46b; }
+.ladder-head.s6 .ladder-title { color: #ff8a8c; }
+.ladder-stocks { display: flex; flex-wrap: wrap; align-content: flex-start; gap: 6px; padding: 9px; flex: 1 1 auto; }
+.stock-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  max-width: 100%;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: var(--panel-3);
+  border: 1px solid var(--border-soft);
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.stock-chip:hover { border-color: #4b5563; background: #27303c; }
+.stock-chip.watched { border-color: var(--gold); background: rgba(210, 153, 34, 0.13); box-shadow: 0 0 0 1px rgba(210, 153, 34, 0.3); }
+.chip-name { font-weight: 600; color: #eef2f6; white-space: nowrap; }
+.chip-code { font-size: 10px; color: var(--dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.chip-streak { flex: none; font-size: 10px; font-weight: 650; padding: 0 4px; border-radius: 4px; }
+.chip-streak.s1 { color: #b6c2d0; background: rgba(139, 148, 158, 0.16); }
+.chip-streak.s2 { color: #9ecbff; background: rgba(88, 166, 255, 0.16); }
+.chip-streak.s3 { color: #7ee0cf; background: rgba(34, 211, 238, 0.15); }
+.chip-streak.s4 { color: #cab6ff; background: rgba(188, 140, 255, 0.17); }
+.chip-streak.s5 { color: #ffc46b; background: rgba(240, 160, 32, 0.18); }
+.chip-streak.s6 { color: #ff8a8c; background: rgba(255, 77, 79, 0.2); }
+.ladder-empty { padding: 12px; font-size: 12px; color: var(--dim); }
+
+/* ---------- tables ---------- */
+.table-wrap { width: 100%; overflow-x: auto; }
+table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.data-table th {
+  text-align: left;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--dim);
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border-soft);
+  white-space: nowrap;
+}
+.data-table td { padding: 7px 10px; border-bottom: 1px solid rgba(48, 54, 61, 0.45); vertical-align: middle; }
+.data-table tbody tr:last-child td { border-bottom: 0; }
+.data-table tbody tr { transition: background 0.12s ease; }
+.data-table tbody tr:hover { background: rgba(88, 166, 255, 0.06); }
+.data-table tbody tr.watched { background: rgba(210, 153, 34, 0.1); box-shadow: inset 3px 0 0 var(--gold); }
+.data-table tbody tr.watched:hover { background: rgba(210, 153, 34, 0.15); }
+.data-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cell-stock { display: flex; align-items: baseline; gap: 7px; min-width: 0; }
+.cell-stock .sname { font-weight: 600; }
+.cell-stock .scode { font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums; }
+.concept-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.concept-tag { font-size: 11px; color: #a8d2ff; background: rgba(88, 166, 255, 0.1); border: 1px solid rgba(88, 166, 255, 0.24); border-radius: 4px; padding: 0 5px; line-height: 17px; white-space: nowrap; }
+.pct-up { color: var(--up); font-weight: 600; }
+.pct-down { color: var(--down); font-weight: 600; }
+.pct-flat { color: var(--muted); }
+.mono { font-variant-numeric: tabular-nums; }
+.flash { animation: row-flash 1.05s ease-in-out 2; }
+@keyframes row-flash {
+  0%, 100% { background-color: transparent; }
+  45% { background-color: rgba(255, 77, 79, 0.3); }
+}
+.flash-panel { animation: panel-flash 1.1s ease-in-out 2; }
+@keyframes panel-flash {
+  0%, 100% { box-shadow: none; }
+  45% { box-shadow: 0 0 0 2px rgba(240, 160, 32, 0.65), 0 0 22px rgba(240, 160, 32, 0.22); }
+}
+
+/* ---------- empty ---------- */
+.empty {
+  padding: 30px 12px;
+  text-align: center;
+  color: var(--dim);
+  font-size: 13px;
+  border: 1px dashed var(--border-soft);
+  border-radius: 10px;
+  background: rgba(22, 27, 34, 0.45);
+}
+.empty .empty-hint { display: block; margin-top: 6px; font-size: 11.5px; color: #5b636d; }
+
+/* ---------- chart ---------- */
+.chart-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0 0 10px; font-size: 11.5px; color: var(--muted); }
+.legend-item { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.legend-dot { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+.chart-wrap { position: relative; width: 100%; height: 360px; }
+.chart-wrap canvas { width: 100% !important; height: 100% !important; display: block; }
+.chart-fallback {
+  padding: 34px 14px;
+  text-align: center;
+  color: var(--amber);
+  font-size: 13px;
+  border: 1px dashed rgba(240, 160, 32, 0.4);
+  border-radius: 10px;
+  background: rgba(240, 160, 32, 0.05);
+}
+
+/* ---------- watchlist ---------- */
+.watch-form { display: flex; gap: 9px; margin-bottom: 8px; flex-wrap: wrap; }
+.watch-input {
+  flex: 1 1 420px;
+  min-width: 240px;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: #10151c;
+  border: 1px solid #3d444d;
+  border-radius: 8px;
+  padding: 8px 12px;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.watch-input::placeholder { color: #57606a; }
+.watch-input:focus { border-color: rgba(88, 166, 255, 0.7); box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.12); }
+.watch-note { margin: 0 0 10px; font-size: 11.5px; color: var(--dim); }
+.status-badge { display: inline-block; font-size: 11px; font-weight: 650; padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.status-badge.limit-up { color: #ff8a8c; background: rgba(255, 77, 79, 0.16); border: 1px solid rgba(255, 77, 79, 0.45); }
+.status-badge.limit-down { color: #4ade80; background: rgba(0, 181, 120, 0.14); border: 1px solid rgba(0, 181, 120, 0.42); }
+.status-badge.normal { color: #b6c2d0; background: rgba(139, 148, 158, 0.12); border: 1px solid rgba(139, 148, 158, 0.3); }
+.status-badge.na { color: var(--dim); background: transparent; border: 1px solid var(--border-soft); font-weight: 500; }
+.status-extra { margin-left: 6px; font-size: 10.5px; color: var(--dim); }
+.remove-btn {
+  font-family: inherit;
+  font-size: 11.5px;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid #3d444d;
+  border-radius: 6px;
+  padding: 2px 9px;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.remove-btn:hover { color: #ff8a8c; border-color: rgba(255, 77, 79, 0.6); }
+
+/* ---------- footer / toast ---------- */
+.page-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 20px;
+  margin-top: 2px;
+  padding: 12px 4px 0;
+  border-top: 1px solid var(--border-soft);
+  color: var(--dim);
+  font-size: 11.5px;
+}
+.page-foot .foot-warn { color: var(--amber); }
+.toast {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: 50;
+  max-width: 420px;
+  padding: 9px 14px;
+  border-radius: 9px;
+  font-size: 13px;
+  color: var(--text);
+  background: #232b36;
+  border: 1px solid #3d444d;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  transform: translateY(6px);
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.toast.show { opacity: 1; transform: none; }
+.toast.ok { border-color: rgba(0, 181, 120, 0.6); }
+.toast.warn { border-color: rgba(240, 160, 32, 0.65); }
+
+/* ---------- responsive ---------- */
+@media (max-width: 1360px) {
+  #app { padding: 16px 16px 30px; }
+  .theme-grid { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
+}
+@media (max-width: 1180px) {
+  .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .ladder-col { flex: 1 0 150px; min-width: 150px; }
+}
+@media (max-width: 720px) {
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .theme-grid { grid-template-columns: 1fr; }
+  .brand h1 { font-size: 19px; }
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="topbar" id="topbar">
+    <div class="topbar-main">
+      <div class="brand">
+        <h1>A股<span class="accent">涨停</span>直播看板</h1>
+        <div class="sub">akshare 免费数据 · 北京时间 · 数据仅供复盘参考，不构成投资建议</div>
+      </div>
+      <div class="meta">
+        <span class="badge phase" id="phaseBadge" title="market_phase">加载中…</span>
+        <span class="meta-item">最后刷新 <b id="lastRefresh">暂无数据</b></span>
+        <span class="meta-item">数据日 <b id="tradeDate">暂无数据</b></span>
+        <span class="badge fallback hidden" id="fallbackBadge">回退</span>
+        <span class="badge refreshing hidden" id="refreshingBadge">刷新中…</span>
+      </div>
+      <div class="actions">
+        <button type="button" class="btn primary" id="refreshBtn" title="立即拉取一份最新快照">刷新</button>
+        <button type="button" class="btn" id="notifyBtn" title="申请浏览器桌面通知权限">开启通知</button>
+      </div>
+    </div>
+    <div class="fallback-note hidden" id="fallbackNote"></div>
+    <div class="banner stale hidden" id="staleBanner" role="alert" aria-live="assertive"></div>
+    <div class="banner error hidden" id="errorBanner" role="alert" aria-live="assertive"></div>
+    <div class="alert-strip hidden" id="alertStrip" role="status" aria-live="polite"></div>
+    <div class="stats" id="stats">
+      <div class="stat">
+        <div class="stat-label">涨停</div>
+        <div class="stat-value up" id="statLimitUp">暂无数据</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">炸板</div>
+        <div class="stat-value amber" id="statBroken">暂无数据</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">跌停</div>
+        <div class="stat-value down" id="statLimitDown">暂无数据</div>
+      </div>
+      <div class="stat" id="statCardBrokenRate">
+        <div class="stat-label">炸板率</div>
+        <div class="stat-value amber" id="statBrokenRate">暂无数据</div>
+        <div class="stat-sub hidden" id="statBrokenRateSub"></div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">连板高度</div>
+        <div class="stat-value purple"><span id="statMaxStreak">暂无数据</span><span class="stat-unit hidden" id="statMaxStreakUnit">连板</span></div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">昨日涨停今日平均溢价</div>
+        <div class="stat-value" id="statPremium">暂无数据</div>
+        <div class="stat-sub hidden" id="statPremiumSub"></div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel" id="themeSection">
+      <div class="panel-head">
+        <h2>题材榜</h2>
+        <span class="panel-note">按题材分组的涨停股 · 组内按首次封板时间排序 · <b>点击股票加入/移出自选</b></span>
+      </div>
+      <div id="themeGrid" class="theme-grid"></div>
+    </section>
+
+    <section class="panel" id="ladderSection">
+      <div class="panel-head">
+        <h2>连板梯队</h2>
+        <span class="panel-note">按连板数从左到右排列，最高连板在最左 · 点击股票加入/移出自选</span>
+      </div>
+      <div id="ladderWrap" class="ladder-wrap"></div>
+    </section>
+
+    <section class="panel" id="brokenSection">
+      <div class="panel-head">
+        <h2>炸板股池</h2>
+        <span class="panel-note" id="brokenCountNote">盘中封板后被砸开的股票</span>
+      </div>
+      <div class="table-wrap hidden" id="brokenTableWrap">
+        <table class="data-table" id="brokenTable">
+          <thead>
+            <tr>
+              <th>名称</th>
+              <th>概念</th>
+              <th class="num">最高涨幅</th>
+              <th class="num">当前涨幅</th>
+              <th class="num">炸板次数</th>
+              <th class="num">炸板时间</th>
+            </tr>
+          </thead>
+          <tbody id="brokenTbody"></tbody>
+        </table>
+      </div>
+      <div class="empty hidden" id="brokenEmpty">暂无数据</div>
+    </section>
+
+    <section class="panel" id="timelineSection">
+      <div class="panel-head">
+        <h2>时间线</h2>
+        <span class="panel-note">首次封板时间（09:25–15:00）· 颜色按题材分组 · 悬停查看名称/代码/题材/首封/连板</span>
+      </div>
+      <div class="chart-legend hidden" id="chartLegend"></div>
+      <div class="chart-wrap" id="chartWrap">
+        <canvas id="timelineChart" role="img" aria-label="首次封板时间线"></canvas>
+      </div>
+      <div class="chart-fallback hidden" id="chartFallback">图表加载失败：Chart.js 未能从 CDN 加载，时间线暂不可用</div>
+      <div class="empty hidden" id="chartEmpty">暂无数据</div>
+    </section>
+
+    <section class="panel" id="watchSection">
+      <div class="panel-head">
+        <h2>自选</h2>
+        <span class="panel-note">输入 6 位股票代码（逗号/空格/换行分隔），或直接点击上方股票加入自选</span>
+      </div>
+      <div class="watch-form">
+        <input type="text" class="watch-input" id="watchInput" placeholder="输入 6 位股票代码，例如：600519, 000001" autocomplete="off" spellcheck="false" />
+        <button type="button" class="btn" id="watchAddBtn">加入自选</button>
+      </div>
+      <p class="watch-note" id="watchNote">自选数据来自快照 · 数据时间 暂无数据（北京时间）</p>
+      <div class="table-wrap hidden" id="watchTableWrap">
+        <table class="data-table" id="watchTable">
+          <thead>
+            <tr>
+              <th>代码</th>
+              <th>名称</th>
+              <th class="num">最新价</th>
+              <th class="num">涨跌幅</th>
+              <th>状态</th>
+              <th class="num">操作</th>
+            </tr>
+          </thead>
+          <tbody id="watchTbody"></tbody>
+        </table>
+      </div>
+      <div class="empty hidden" id="watchEmpty">暂无数据<span class="empty-hint">在上方输入 6 位股票代码，或点击股票行加入自选；自选保存在浏览器本地。</span></div>
+    </section>
+  </main>
+
+  <footer class="page-foot" id="pageFoot"></footer>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ============================================================
+   * 常量与状态
+   * ============================================================ */
+  var API_SNAPSHOT = '/api/snapshot';
+  var API_REFRESH = '/api/refresh';
+  var WATCH_KEY = 'limitup.watchlist';
+  var DEDUPE_KEY = 'limitup.alertDedupe';
+  var POLL_TRADING_MS = 60000;
+  var POLL_IDLE_MS = 300000;
+  var ALERT_TTL_MS = 10 * 60 * 1000;
+  var MAX_WATCH = 60;
+  var MAX_ALERTS = 30;
+  var BROKEN_RATE_THRESHOLD = 0.40;
+  var CHART_OPEN_MIN = 565;   /* 09:25 */
+  var CHART_CLOSE_MIN = 900;  /* 15:00 */
+  var NA_TEXT = '暂无数据';
+  var DASH = '—';
+  var NA_TITLE = '免费数据源未提供该字段';
+
+  var PHASE_LABELS = {
+    pre_open: '盘前',
+    auction: '集合竞价',
+    trading: '盘中',
+    lunch: '午休',
+    closed: '收盘',
+    non_trading_day: '非交易日'
+  };
+  var PHASE_CLASS = {
+    pre_open: 'ph-pre',
+    auction: 'ph-auction',
+    trading: 'ph-trading',
+    lunch: 'ph-lunch',
+    closed: 'ph-closed',
+    non_trading_day: 'ph-holiday'
+  };
+  var THEME_PALETTE = [
+    '#ff4d4f', '#ff9f43', '#ffd166', '#4ade80', '#22d3ee', '#58a6ff',
+    '#a78bfa', '#f472b6', '#fb7185', '#34d399', '#eab308', '#818cf8'
+  ];
+  var X_TICK_MINUTES = [565, 600, 630, 660, 690, 780, 810, 840, 870, 900];
+
+  var state = {
+    data: null,
+    chart: null,
+    chartNeedsRetry: false,
+    timer: null,
+    fetching: false,
+    watch: [],
+    dedupe: {},
+    alerts: [],
+    lastFetchError: null
+  };
+  var toastTimer = null;
+  var refetchTimer = null;
+
+  /* ============================================================
+   * 通用小工具
+   * ============================================================ */
+  function $(id) { return document.getElementById(id); }
+
+  function esc(value) {
+    if (value === null || value === undefined) return '';
+    return String(value).replace(/[&<>"']/g, function (ch) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+    });
+  }
+
+  function num(value) {
+    if (typeof value === 'number' && isFinite(value)) return value;
+    if (typeof value === 'string' && /^-?\d+(\.\d+)?$/.test(value.trim())) return Number(value.trim());
+    return null;
+  }
+
+  function str(value) {
+    return (typeof value === 'string' && value.length > 0) ? value : null;
+  }
+
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+
+  function naHtml(title, text) {
+    return '<span class="na"' + (title ? ' title="' + esc(title) + '"' : '') + '>' + esc(text || NA_TEXT) + '</span>';
+  }
+
+  function dashHtml(title) {
+    return '<span class="na"' + (title ? ' title="' + esc(title) + '"' : '') + '>' + DASH + '</span>';
+  }
+
+  /* 6 位代码归一化（容忍 sh600519 / 600519 数字） */
+  function normCode(value) {
+    if (value === null || value === undefined) return null;
+    if (typeof value === 'number' && isFinite(value)) {
+      var s = String(Math.round(value));
+      return /^\d{6}$/.test(s) ? s : null;
+    }
+    var digits = String(value).replace(/\D/g, '');
+    if (digits.length === 6) return digits;
+    if (digits.length > 6 && /^\d{6}$/.test(digits.slice(-6))) return digits.slice(-6);
+    return null;
+  }
+
+  /* HH:MM[:SS] 归一化成 HH:MM:SS */
+  function normalizeHms(value) {
+    var s = str(value);
+    if (!s) return null;
+    var m = /^(\d{1,2}):(\d{2})(?::(\d{2}))?/.exec(s.trim());
+    if (!m) return null;
+    var h = parseInt(m[1], 10);
+    var mi = parseInt(m[2], 10);
+    var se = m[3] ? parseInt(m[3], 10) : 0;
+    if (h > 23 || mi > 59 || se > 59) return null;
+    return pad2(h) + ':' + pad2(mi) + ':' + pad2(se);
+  }
+
+  function hmsToMinutes(value) {
+    var t = normalizeHms(value);
+    if (!t) return null;
+    var p = t.split(':');
+    return parseInt(p[0], 10) * 60 + parseInt(p[1], 10) + parseInt(p[2], 10) / 60;
+  }
+
+  function minutesToHm(minutes) {
+    var m = Math.round(minutes);
+    if (m < 0) m = 0;
+    var h = Math.floor(m / 60) % 24;
+    var mi = m % 60;
+    return pad2(h) + ':' + pad2(mi);
+  }
+
+  /* ISO8601 → 北京时间各字段（服务端时间为 +08:00） */
+  function bjFromIso(iso) {
+    var s = str(iso);
+    if (!s) return null;
+    var t = Date.parse(s);
+    if (isNaN(t)) return null;
+    var d = new Date(t + 8 * 3600 * 1000);
+    return {
+      h: d.getUTCHours(),
+      mi: d.getUTCMinutes(),
+      se: d.getUTCSeconds(),
+      y: d.getUTCFullYear(),
+      mo: d.getUTCMonth() + 1,
+      day: d.getUTCDate()
+    };
+  }
+
+  function isoHms(iso) {
+    var p = bjFromIso(iso);
+    return p ? pad2(p.h) + ':' + pad2(p.mi) + ':' + pad2(p.se) : null;
+  }
+
+  function isoHm(iso) {
+    var p = bjFromIso(iso);
+    return p ? pad2(p.h) + ':' + pad2(p.mi) : null;
+  }
+
+  function bjNow() {
+    var d = new Date(Date.now() + 8 * 3600 * 1000);
+    return {
+      h: d.getUTCHours(),
+      mi: d.getUTCMinutes(),
+      se: d.getUTCSeconds(),
+      weekday: d.getUTCDay()
+    };
+  }
+
+  function bjNowHms() {
+    var p = bjNow();
+    return pad2(p.h) + ':' + pad2(p.mi) + ':' + pad2(p.se);
+  }
+
+  /* 北京时间交易时段：09:25–11:30 / 13:00–15:00（周一至周五） */
+  function isBjTradingHours() {
+    var p = bjNow();
+    if (p.weekday === 0 || p.weekday === 6) return false;
+    var m = p.h * 60 + p.mi;
+    return (m >= 565 && m <= 690) || (m >= 780 && m <= 900);
+  }
+
+  function tradeDateText(value) {
+    var s = str(value);
+    if (!s) return null;
+    var m = /^(\d{4})(\d{2})(\d{2})$/.exec(s.trim());
+    if (!m) return s;
+    return m[1] + '-' + m[2] + '-' + m[3];
+  }
+
+  function fmtYi(value) {
+    var n = num(value);
+    return n === null ? null : n.toFixed(2) + '亿';
+  }
+
+  function fmtPct(value, withSign) {
+    var n = num(value);
+    if (n === null) return null;
+    return (withSign && n > 0 ? '+' : '') + n.toFixed(2) + '%';
+  }
+
+  function pctClass(value) {
+    var n = num(value);
+    if (n === null) return '';
+    if (n > 0) return 'pct-up';
+    if (n < 0) return 'pct-down';
+    return 'pct-flat';
+  }
+
+  function streakBucket(n) {
+    if (n === null) return 1;
+    if (n >= 6) return 6;
+    if (n < 1) return 1;
+    return n;
+  }
+
+  /* ============================================================
+   * localStorage（隐私模式下可能抛错，全部兜底）
+   * ============================================================ */
+  function storageGet(key) {
+    try { return window.localStorage.getItem(key); } catch (e) { return null; }
+  }
+
+  function storageSet(key, value) {
+    try { window.localStorage.setItem(key, value); return true; } catch (e) { return false; }
+  }
+
+  function loadWatch() {
+    var raw = storageGet(WATCH_KEY);
+    var out = [];
+    if (!raw) return out;
+    try {
+      var parsed = JSON.parse(raw);
+      var list = Array.isArray(parsed) ? parsed : String(raw).split(/[^0-9]+/);
+      for (var i = 0; i < list.length; i++) {
+        var code = normCode(list[i]);
+        if (code && out.indexOf(code) < 0) out.push(code);
+      }
+    } catch (e) {
+      var matches = String(raw).match(/\d{6}/g) || [];
+      for (var j = 0; j < matches.length; j++) {
+        if (out.indexOf(matches[j]) < 0) out.push(matches[j]);
+      }
+    }
+    return out.slice(0, MAX_WATCH);
+  }
+
+  function saveWatch() {
+    storageSet(WATCH_KEY, JSON.stringify(state.watch));
+  }
+
+  function isWatched(code) {
+    return !!code && state.watch.indexOf(code) >= 0;
+  }
+
+  function loadDedupe() {
+    var raw = storageGet(DEDUPE_KEY);
+    var now = Date.now();
+    var out = {};
+    if (!raw) return out;
+    try {
+      var parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        for (var key in parsed) {
+          if (Object.prototype.hasOwnProperty.call(parsed, key)) {
+            var ts = num(parsed[key]);
+            if (ts !== null && now - ts < ALERT_TTL_MS) out[key] = ts;
+          }
+        }
+      }
+    } catch (e) { /* 忽略损坏的本地缓存 */ }
+    return out;
+  }
+
+  function saveDedupe() {
+    var now = Date.now();
+    var out = {};
+    for (var key in state.dedupe) {
+      if (Object.prototype.hasOwnProperty.call(state.dedupe, key) &&
+          now - state.dedupe[key] < ALERT_TTL_MS) {
+        out[key] = state.dedupe[key];
+      }
+    }
+    storageSet(DEDUPE_KEY, JSON.stringify(out));
+  }
+
+  /* 同一事件在 TTL 内只报一次；返回 true 表示可以触发 */
+  function allowAlert(key) {
+    var now = Date.now();
+    var ts = state.dedupe[key];
+    if (ts !== undefined && now - ts < ALERT_TTL_MS) return false;
+    state.dedupe[key] = now;
+    saveDedupe();
+    return true;
+  }
+
+  /* ============================================================
+   * 提示条 / 横幅
+   * ============================================================ */
+  function showToast(text, kind) {
+    var node = $('toast');
+    if (!node) return;
+    node.textContent = text;
+    node.className = 'toast show' + (kind ? ' ' + kind : '');
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { node.className = 'toast'; }, 4000);
+  }
+
+  function showErrorBanner(text) {
+    var node = $('errorBanner');
+    if (!node) return;
+    node.textContent = text;
+    node.classList.remove('hidden');
+  }
+
+  function hideErrorBanner() {
+    var node = $('errorBanner');
+    if (!node) return;
+    node.textContent = '';
+    node.classList.add('hidden');
+  }
+
+  function updateRefreshBadge() {
+    var badge = $('refreshingBadge');
+    if (!badge) return;
+    var refreshing = state.fetching || (state.data && state.data.refreshing === true);
+    if (!refreshing) {
+      badge.classList.add('hidden');
+      return;
+    }
+    badge.textContent = state.fetching
+      ? (state.data ? '刷新中…' : '加载中…')
+      : '后台刷新中…';
+    badge.classList.remove('hidden');
+  }
+
+  function setBusy(busy) {
+    var btn = $('refreshBtn');
+    if (!btn) return;
+    btn.disabled = busy;
+    btn.textContent = busy ? '刷新中…' : '刷新';
+    updateRefreshBadge();
+  }
+
+  /* ============================================================
+   * 通知
+   * ============================================================ */
+  function notifySupported() {
+    try {
+      return typeof window.Notification !== 'undefined' &&
+        typeof window.Notification.permission === 'string';
+    } catch (e) { return false; }
+  }
+
+  function updateNotifyBtn() {
+    var btn = $('notifyBtn');
+    if (!btn) return;
+    if (!notifySupported()) {
+      btn.textContent = '通知不可用';
+      btn.disabled = true;
+      btn.title = '当前浏览器不支持桌面通知，告警仍会在页面内显示';
+      return;
+    }
+    var perm = 'default';
+    try { perm = window.Notification.permission; } catch (e) { perm = 'default'; }
+    if (perm === 'granted') {
+      btn.textContent = '通知已开启';
+      btn.classList.add('on');
+      btn.disabled = true;
+      btn.title = '已获得桌面通知权限';
+    } else if (perm === 'denied') {
+      btn.textContent = '通知被拒绝';
+      btn.classList.remove('on');
+      btn.disabled = true;
+      btn.title = '浏览器已拒绝通知权限，可在站点设置中恢复；告警仍会在页面内显示';
+    } else {
+      btn.textContent = '开启通知';
+      btn.classList.remove('on');
+      btn.disabled = false;
+      btn.title = '点击申请浏览器桌面通知权限';
+    }
+  }
+
+  function requestNotifyPermission() {
+    if (!notifySupported()) {
+      showToast('当前浏览器不支持桌面通知，告警仍会在页面内显示', 'warn');
+      return;
+    }
+    try {
+      var result = window.Notification.requestPermission();
+      if (result && typeof result.then === 'function') {
+        result.then(function (perm) {
+          updateNotifyBtn();
+          showToast(perm === 'granted'
+            ? '通知已开启，告警会同时推送到系统通知'
+            : '通知权限未开启，告警仍会在页面内显示', 'ok');
+        }).catch(function () {
+          updateNotifyBtn();
+          showToast('通知权限申请失败，告警仍会在页面内显示', 'warn');
+        });
+      } else {
+        updateNotifyBtn();
+      }
+    } catch (e) {
+      updateNotifyBtn();
+      showToast('通知权限申请失败，告警仍会在页面内显示', 'warn');
+    }
+  }
+
+  function fireNotification(title, body, tag) {
+    if (!notifySupported()) return;
+    try {
+      if (window.Notification.permission !== 'granted') return;
+      new window.Notification(title, { body: body, tag: tag, silent: false });
+    } catch (e) { /* 通知失败不影响页面 */ }
+  }
+
+  /* ============================================================
+   * 顶部区域渲染
+   * ============================================================ */
+  function setStat(id, text, toneClass, title) {
+    var node = $(id);
+    if (!node) return;
+    node.textContent = text === null ? NA_TEXT : text;
+    node.className = 'stat-value' + (text === null ? ' na' : (toneClass ? ' ' + toneClass : ''));
+    if (title) node.title = title;
+    else node.removeAttribute('title');
+  }
+
+  function renderHeader(data) {
+    var d = data || {};
+    var stats = (d.stats && typeof d.stats === 'object') ? d.stats : {};
+    var limitUp = num(stats.limit_up_count);
+    var broken = num(stats.broken_count);
+    var limitDown = num(stats.limit_down_count);
+    var brokenRate = num(stats.broken_rate);
+    var maxStreak = num(stats.max_streak);
+    var premium = num(stats.prev_limit_up_premium);
+
+    setStat('statLimitUp', limitUp === null ? null : String(Math.round(limitUp)), 'up', '当日涨停家数');
+    setStat('statBroken', broken === null ? null : String(Math.round(broken)), 'amber', '当日炸板家数');
+    setStat('statLimitDown', limitDown === null ? null : String(Math.round(limitDown)), 'down', '当日跌停家数');
+
+    var rateText = brokenRate === null ? null : (brokenRate * 100).toFixed(2) + '%';
+    var rateTone = brokenRate !== null && brokenRate >= BROKEN_RATE_THRESHOLD ? 'up' : 'amber';
+    setStat('statBrokenRate', rateText, rateTone, '炸板率 = 炸板 /（涨停 + 炸板）');
+    renderBrokenRateSub(broken, limitUp);
+
+    var streakTone = 'purple';
+    setStat('statMaxStreak', maxStreak === null ? null : String(Math.round(maxStreak)), streakTone, '当日最高连板高度');
+    var streakUnit = $('statMaxStreakUnit');
+    if (streakUnit) streakUnit.classList.toggle('hidden', maxStreak === null);
+
+    setStat('statPremium', premium === null ? null : fmtPct(premium, true),
+      premium === null ? '' : (premium > 0 ? 'up' : (premium < 0 ? 'down' : '')),
+      '昨日涨停股今日平均涨跌幅');
+    renderPremiumSub(stats);
+
+    /* market_phase 中文标签 */
+    var phaseBadge = $('phaseBadge');
+    if (phaseBadge) {
+      var phase = str(d.market_phase);
+      var phaseLabel = phase && PHASE_LABELS[phase] ? PHASE_LABELS[phase] : null;
+      phaseBadge.textContent = phaseLabel || NA_TEXT;
+      phaseBadge.className = 'badge phase ' + (phase && PHASE_CLASS[phase] ? PHASE_CLASS[phase] : '');
+      phaseBadge.title = phase ? ('market_phase: ' + phase) : 'market_phase 缺失';
+    }
+
+    /* 最后刷新时间 */
+    var lastRefresh = $('lastRefresh');
+    if (lastRefresh) {
+      var refreshText = isoHms(d.refreshed_at);
+      lastRefresh.textContent = refreshText || NA_TEXT;
+      lastRefresh.title = '最近一次成功拉取全量数据的时间（北京时间）';
+    }
+
+    /* 数据日 / 回退 */
+    var tradeDate = $('tradeDate');
+    if (tradeDate) {
+      var tdText = tradeDateText(d.trade_date);
+      tradeDate.textContent = tdText || NA_TEXT;
+      var reqText = tradeDateText(d.requested_date);
+      tradeDate.title = reqText ? ('应取交易日 ' + reqText + '，实际数据日 ' + (tdText || NA_TEXT)) : '实际数据所属交易日';
+    }
+
+    var fallbackBadge = $('fallbackBadge');
+    var fallbackNote = $('fallbackNote');
+    if (d.is_fallback === true) {
+      if (fallbackBadge) {
+        fallbackBadge.classList.remove('hidden');
+        fallbackBadge.textContent = '回退';
+        fallbackBadge.title = str(d.fallback_note) || '当前无当日数据，已回退到最近交易日';
+      }
+      if (fallbackNote) {
+        var note = str(d.fallback_note);
+        if (note) {
+          fallbackNote.textContent = note;
+          fallbackNote.classList.remove('hidden');
+        } else {
+          fallbackNote.textContent = '';
+          fallbackNote.classList.add('hidden');
+        }
+      }
+    } else {
+      if (fallbackBadge) fallbackBadge.classList.add('hidden');
+      if (fallbackNote) { fallbackNote.textContent = ''; fallbackNote.classList.add('hidden'); }
+    }
+
+    /* stale 红色横幅 */
+    var staleBanner = $('staleBanner');
+    if (staleBanner) {
+      if (d.stale && d.stale.is_stale === true) {
+        var since = isoHm(d.stale.since) || '--:--';
+        var reason = str(d.stale.reason) || '原因未知';
+        staleBanner.textContent = '数据已过期：自 ' + since + ' 起未更新（' + reason + '）';
+        staleBanner.classList.remove('hidden');
+      } else {
+        staleBanner.textContent = '';
+        staleBanner.classList.add('hidden');
+      }
+    }
+
+    updateRefreshBadge();
+    updateNotifyBtn();
+  }
+
+  function renderBrokenRateSub(broken, limitUp) {
+    var node = $('statBrokenRateSub');
+    if (!node) return;
+    if (broken === null || limitUp === null) {
+      node.textContent = '';
+      node.classList.add('hidden');
+      return;
+    }
+    node.textContent = '炸板 ' + Math.round(broken) + ' / 涨停 ' + Math.round(limitUp);
+    node.classList.remove('hidden');
+  }
+
+  function renderPremiumSub(stats) {
+    var node = $('statPremiumSub');
+    if (!node) return;
+    var count = num(stats.prev_limit_up_count);
+    if (count === null) {
+      node.textContent = '';
+      node.classList.add('hidden');
+      return;
+    }
+    node.textContent = '昨日涨停 ' + Math.round(count) + ' 只今日均值';
+    node.classList.remove('hidden');
+  }
+
+  /* ============================================================
+   * 题材榜
+   * ============================================================ */
+  function streakBadge(streak) {
+    var n = num(streak);
+    if (n === null) return '<span class="streak-badge s-na">--</span>';
+    var bucket = streakBucket(n);
+    return '<span class="streak-badge s' + bucket + '" title="连板数">' + esc(Math.round(n) + '连板') + '</span>';
+  }
+
+  function cmpFirstSeal(a, b) {
+    var ta = hmsToMinutes(a && a.first_seal);
+    var tb = hmsToMinutes(b && b.first_seal);
+    if (ta === null && tb === null) return 0;
+    if (ta === null) return 1;
+    if (tb === null) return -1;
+    return ta - tb;
+  }
+
+  function watchRowTitle(code, name) {
+    return (isWatched(code) ? '点击移出自选：' : '点击加入自选：') + (name || '') + (code ? '（' + code + '）' : '');
+  }
+
+  function themeStockRow(stock) {
+    var code = normCode(stock && stock.code);
+    var name = str(stock && stock.name) || NA_TEXT;
+    var watched = isWatched(code);
+    var seal = fmtYi(stock && stock.seal_amount_yi);
+    var cap = fmtYi(stock && stock.float_cap_yi);
+    var breakTimes = num(stock && stock.break_times);
+    var firstSeal = normalizeHms(stock && stock.first_seal);
+    var attrCode = code ? ' data-stock-code="' + esc(code) + '"' : '';
+    var html = '<div class="theme-row' + (watched ? ' watched' : '') + '"' + attrCode +
+      ' data-stock-name="' + esc(name) + '" title="' + esc(watchRowTitle(code, name)) + '">' +
+      '<div class="row-main"><span class="sname">' + esc(name) + '</span>' +
+      (code ? '<span class="scode">' + esc(code) + '</span>' : '') +
+      streakBadge(stock && stock.streak) + '</div>' +
+      '<div class="row-sub">' +
+      '<span class="sub-item">首封 <b>' + (firstSeal ? esc(firstSeal) : naHtml(NA_TITLE)) + '</b></span>' +
+      '<span class="sub-item">封单 <b>' + (seal ? esc(seal) : naHtml()) + '</b></span>' +
+      '<span class="sub-item">炸板 <b>' + (breakTimes === null ? naHtml() : esc(Math.round(breakTimes) + '次')) + '</b></span>' +
+      '<span class="sub-item">流通 <b>' + (cap ? esc(cap) : naHtml()) + '</b></span>' +
+      '</div></div>';
+    return html;
+  }
+
+  function renderThemes(data) {
+    var wrap = $('themeGrid');
+    if (!wrap) return;
+    var themes = (data && Array.isArray(data.themes)) ? data.themes.slice() : [];
+    themes.sort(function (a, b) {
+      var ca = num(a && a.count);
+      var cb = num(b && b.count);
+      var sa = ca === null ? ((a && Array.isArray(a.stocks)) ? a.stocks.length : 0) : ca;
+      var sb = cb === null ? ((b && Array.isArray(b.stocks)) ? b.stocks.length : 0) : cb;
+      if (sb !== sa) return sb - sa;
+      var ta = hmsToMinutes(a && a.earliest_first_seal);
+      var tb = hmsToMinutes(b && b.earliest_first_seal);
+      if (ta !== null && tb !== null && ta !== tb) return ta - tb;
+      if (ta === null && tb !== null) return 1;
+      if (tb === null && ta !== null) return -1;
+      return String((a && a.name) || '').localeCompare(String((b && b.name) || ''), 'zh-Hans-CN');
+    });
+    if (!themes.length) {
+      wrap.innerHTML = '<div class="empty" style="grid-column:1/-1">暂无数据</div>';
+      return;
+    }
+    var html = '';
+    for (var i = 0; i < themes.length; i++) {
+      var theme = themes[i] || {};
+      var stocks = Array.isArray(theme.stocks) ? theme.stocks.slice() : [];
+      stocks.sort(cmpFirstSeal);
+      var count = num(theme.count);
+      var countText = count === null ? stocks.length : Math.round(count);
+      var earliest = normalizeHms(theme.earliest_first_seal);
+      if (!earliest) {
+        for (var k = 0; k < stocks.length; k++) {
+          if (normalizeHms(stocks[k] && stocks[k].first_seal)) { earliest = normalizeHms(stocks[k].first_seal); break; }
+        }
+      }
+      var isFallback = theme.is_industry_fallback === true;
+      html += '<article class="theme-card">' +
+        '<div class="theme-head">' +
+        '<span class="theme-name">' + esc(str(theme.name) || '未分类') + '</span>' +
+        '<span class="theme-count">×' + esc(countText) + '</span>' +
+        (isFallback ? '<span class="tag-fallback" title="概念映射缺失，使用所属行业兜底">行业口径</span>' : '') +
+        '<span class="theme-early">最早 ' + (earliest ? esc(earliest) : NA_TEXT) + '</span>' +
+        '</div><div class="theme-body">';
+      if (!stocks.length) {
+        html += '<div class="empty" style="border:0;background:transparent;padding:16px 12px">暂无数据</div>';
+      } else {
+        for (var j = 0; j < stocks.length; j++) html += themeStockRow(stocks[j]);
+      }
+      html += '</div></article>';
+    }
+    wrap.innerHTML = html;
+  }
+
+  /* ============================================================
+   * 连板梯队
+   * ============================================================ */
+  function renderLadder(data) {
+    var wrap = $('ladderWrap');
+    if (!wrap) return;
+    var groups = (data && Array.isArray(data.ladder)) ? data.ladder.slice() : [];
+    var cols = [];
+    for (var i = 0; i < groups.length; i++) {
+      var group = groups[i];
+      if (!group || typeof group !== 'object') continue;
+      var streak = num(group.streak);
+      if (streak === null) continue;
+      var stocks = Array.isArray(group.stocks) ? group.stocks.slice() : [];
+      stocks.sort(cmpFirstSeal);
+      cols.push({ streak: Math.round(streak), stocks: stocks });
+    }
+    cols.sort(function (a, b) { return b.streak - a.streak; });
+    if (!cols.length) {
+      wrap.innerHTML = '<div class="empty" style="flex:1 1 100%">暂无数据</div>';
+      return;
+    }
+    var html = '';
+    for (var c = 0; c < cols.length; c++) {
+      var col = cols[c];
+      var bucket = streakBucket(col.streak);
+      /* 含股票越多的梯队列越宽，避免 1 板大池把整个区块撑高 */
+      var grow = Math.max(1, Math.min(col.stocks.length, 12));
+      html += '<div class="ladder-col" style="flex-grow:' + grow + '">' +
+        '<div class="ladder-head s' + bucket + '">' +
+        '<span class="ladder-title">' + esc(col.streak + '连板') + '</span>' +
+        '<span class="ladder-count">' + esc(col.stocks.length + ' 只') + '</span>' +
+        '</div><div class="ladder-stocks">';
+      if (!col.stocks.length) {
+        html += '<div class="ladder-empty">暂无数据</div>';
+      } else {
+        for (var s = 0; s < col.stocks.length; s++) {
+          var stock = col.stocks[s] || {};
+          var code = normCode(stock.code);
+          var name = str(stock.name) || NA_TEXT;
+          html += '<span class="stock-chip' + (isWatched(code) ? ' watched' : '') + '"' +
+            (code ? ' data-stock-code="' + esc(code) + '"' : '') +
+            ' data-stock-name="' + esc(name) + '"' +
+            ' title="' + esc(watchRowTitle(code, name) + ' · ' + col.streak + '连板') + '">' +
+            '<span class="chip-name">' + esc(name) + '</span>' +
+            (code ? '<span class="chip-code">' + esc(code) + '</span>' : '') +
+            '<span class="chip-streak s' + bucket + '">' + esc(streakShort(col.streak)) + '</span>' +
+            '</span>';
+        }
+      }
+      html += '</div></div>';
+    }
+    wrap.innerHTML = html;
+  }
+
+  function streakShort(streak) {
+    return streak >= 6 ? '6+板' : streak + '板';
+  }
+
+  /* ============================================================
+   * 炸板股池
+   * ============================================================ */
+  function renderBroken(data) {
+    var tbody = $('brokenTbody');
+    var wrap = $('brokenTableWrap');
+    var empty = $('brokenEmpty');
+    var note = $('brokenCountNote');
+    if (!tbody || !wrap || !empty) return;
+    var rows = (data && Array.isArray(data.broken)) ? data.broken : [];
+    if (!rows.length) {
+      tbody.innerHTML = '';
+      wrap.classList.add('hidden');
+      empty.classList.remove('hidden');
+      if (note) note.textContent = '盘中封板后被砸开的股票';
+      return;
+    }
+    wrap.classList.remove('hidden');
+    empty.classList.add('hidden');
+    if (note) note.textContent = '共 ' + rows.length + ' 只 · 名称/概念/最高涨幅/当前涨幅/炸板次数/炸板时间';
+    var html = '';
+    for (var i = 0; i < rows.length; i++) {
+      var row = rows[i] || {};
+      var code = normCode(row.code);
+      var name = str(row.name) || NA_TEXT;
+      var watched = isWatched(code);
+      var concepts = Array.isArray(row.concepts) ? row.concepts.filter(function (x) { return str(x); }) : [];
+      var industry = str(row.industry);
+      var conceptHtml = '';
+      if (concepts.length) {
+        conceptHtml = '<div class="concept-tags">';
+        for (var c = 0; c < Math.min(concepts.length, 3); c++) {
+          conceptHtml += '<span class="concept-tag">' + esc(concepts[c]) + '</span>';
+        }
+        conceptHtml += '</div>';
+      } else if (industry) {
+        conceptHtml = '<span class="concept-tag">' + esc(industry) + '</span>';
+      } else {
+        conceptHtml = naHtml();
+      }
+      var high = num(row.high_pct);
+      var current = num(row.current_pct);
+      var breakTimes = num(row.break_times);
+      var breakTime = normalizeHms(row.break_time);
+      html += '<tr' + (code ? ' data-broken-code="' + esc(code) + '" data-broken-name="' + esc(name) + '"' : '') +
+        (watched ? ' class="watched"' : '') + ' title="' + esc(watchRowTitle(code, name)) + '">' +
+        '<td><div class="cell-stock"><span class="sname">' + esc(name) + '</span>' +
+        (code ? '<span class="scode">' + esc(code) + '</span>' : '') + '</div></td>' +
+        '<td>' + conceptHtml + '</td>' +
+        '<td class="num">' + (high === null
+          ? dashHtml('免费接口未提供最高涨幅')
+          : '<span class="' + pctClass(high) + '">' + esc(fmtPct(high, true)) + '</span>') + '</td>' +
+        '<td class="num">' + (current === null
+          ? naHtml()
+          : '<span class="' + pctClass(current) + '">' + esc(fmtPct(current, true)) + '</span>') + '</td>' +
+        '<td class="num">' + (breakTimes === null ? naHtml() : esc(Math.round(breakTimes) + ' 次')) + '</td>' +
+        '<td class="num mono">' + (breakTime
+          ? esc(breakTime)
+          : dashHtml('免费接口（akshare 炸板池）未提供炸板时间')) + '</td>' +
+        '</tr>';
+    }
+    tbody.innerHTML = html;
+  }
+
+  /* ============================================================
+   * 时间线（Chart.js）
+   * ============================================================ */
+  function hashCode(text) {
+    var s = String(text || '');
+    var h = 0;
+    for (var i = 0; i < s.length; i++) {
+      h = ((h * 31) + s.charCodeAt(i)) | 0;
+    }
+    return Math.abs(h);
+  }
+
+  function themeColor(theme) {
+    return THEME_PALETTE[hashCode(theme) % THEME_PALETTE.length];
+  }
+
+  function destroyChart() {
+    if (state.chart) {
+      try { state.chart.destroy(); } catch (e) { /* 忽略销毁异常 */ }
+      state.chart = null;
+    }
+  }
+
+  function setChartView(mode) {
+    var wrap = $('chartWrap');
+    var fallback = $('chartFallback');
+    var empty = $('chartEmpty');
+    var legend = $('chartLegend');
+    if (wrap) wrap.classList.toggle('hidden', mode !== 'chart');
+    if (fallback) fallback.classList.toggle('hidden', mode !== 'fallback');
+    if (empty) empty.classList.toggle('hidden', mode !== 'empty');
+    if (legend) legend.classList.toggle('hidden', mode !== 'chart');
+  }
+
+  function renderChartLegend(entries) {
+    var legend = $('chartLegend');
+    if (!legend) return;
+    var counts = {};
+    var order = [];
+    for (var i = 0; i < entries.length; i++) {
+      var theme = entries[i].theme;
+      if (!Object.prototype.hasOwnProperty.call(counts, theme)) {
+        counts[theme] = 0;
+        order.push(theme);
+      }
+      counts[theme] += 1;
+    }
+    var html = '';
+    order.sort(function (a, b) {
+      if (counts[b] !== counts[a]) return counts[b] - counts[a];
+      return String(a).localeCompare(String(b), 'zh-Hans-CN');
+    });
+    for (var j = 0; j < order.length; j++) {
+      html += '<span class="legend-item"><span class="legend-dot" style="background:' +
+        esc(themeColor(order[j])) + '"></span>' + esc(order[j]) + ' ×' + esc(counts[order[j]]) + '</span>';
+    }
+    legend.innerHTML = html;
+  }
+
+  function renderTimeline(data) {
+    var canvas = $('timelineChart');
+    var wrap = $('chartWrap');
+    if (!canvas || !wrap) return;
+
+    var raw = (data && Array.isArray(data.timeline)) ? data.timeline : [];
+    var entries = [];
+    for (var i = 0; i < raw.length; i++) {
+      var item = raw[i];
+      if (!item || typeof item !== 'object') continue;
+      var minute = hmsToMinutes(item.first_seal);
+      if (minute === null) continue;
+      if (minute < CHART_OPEN_MIN) minute = CHART_OPEN_MIN;
+      if (minute > CHART_CLOSE_MIN) minute = CHART_CLOSE_MIN;
+      var code = normCode(item.code);
+      entries.push({
+        code: code || '',
+        name: str(item.name) || code || NA_TEXT,
+        theme: str(item.theme) || '未分类',
+        minute: minute,
+        firstSeal: normalizeHms(item.first_seal),
+        streak: num(item.streak),
+        seal: num(item.seal_amount_yi)
+      });
+    }
+    entries.sort(function (a, b) {
+      if (a.minute !== b.minute) return a.minute - b.minute;
+      return a.name.localeCompare(b.name, 'zh-Hans-CN');
+    });
+
+    if (!entries.length) {
+      destroyChart();
+      setChartView('empty');
+      return;
+    }
+    if (typeof window.Chart === 'undefined') {
+      destroyChart();
+      setChartView('fallback');
+      state.chartNeedsRetry = true;
+      return;
+    }
+    state.chartNeedsRetry = false;
+
+    var colors = entries.map(function (entry) { return themeColor(entry.theme); });
+    var labels = entries.map(function (entry) { return entry.name; });
+    var dataPoints = entries.map(function (entry) {
+      /* 09:25 整点封板时 0 宽度不可见，画面上至少保留 1 分钟宽度；tooltip 显示真实时间 */
+      return [CHART_OPEN_MIN, Math.max(entry.minute, CHART_OPEN_MIN + 1)];
+    });
+
+    var height = Math.max(260, Math.min(1500, entries.length * 22 + 58));
+    wrap.style.height = height + 'px';
+
+    destroyChart();
+    try {
+      state.chart = new window.Chart(canvas, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: '首次封板时间',
+            data: dataPoints,
+            backgroundColor: colors,
+            borderColor: colors,
+            borderWidth: 0,
+            borderRadius: 3,
+            borderSkipped: false,
+            barPercentage: 0.8,
+            categoryPercentage: 0.92,
+            hoverBorderColor: '#f0f3f6',
+            hoverBorderWidth: 1
+          }]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: false,
+          resizeDelay: 100,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: '#1f2630',
+              borderColor: '#3d4654',
+              borderWidth: 1,
+              titleColor: '#f0f3f6',
+              bodyColor: '#c9d1d9',
+              padding: 10,
+              displayColors: false,
+              titleFont: { size: 13, weight: '600' },
+              bodyFont: { size: 12 },
+              bodySpacing: 3,
+              callbacks: {
+                title: function (items) {
+                  if (!items || !items.length) return '';
+                  var entry = entries[items[0].dataIndex];
+                  return entry ? entry.name : '';
+                },
+                label: function (item) {
+                  var entry = entries[item.dataIndex];
+                  if (!entry) return '';
+                  var lines = [];
+                  if (entry.code) lines.push('代码：' + entry.code);
+                  lines.push('题材：' + entry.theme);
+                  lines.push('首次封板：' + (entry.firstSeal || NA_TEXT));
+                  lines.push('连板：' + (entry.streak === null ? NA_TEXT : entry.streak + '连板'));
+                  if (entry.seal !== null) lines.push('封板资金：' + entry.seal.toFixed(2) + '亿');
+                  return lines;
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              type: 'linear',
+              min: CHART_OPEN_MIN,
+              max: CHART_CLOSE_MIN,
+              border: { color: '#30363d' },
+              grid: { color: 'rgba(48, 54, 61, 0.55)', drawTicks: false },
+              afterBuildTicks: function (scale) {
+                scale.ticks = X_TICK_MINUTES.map(function (v) { return { value: v }; });
+              },
+              ticks: {
+                color: '#8b949e',
+                font: { size: 11 },
+                padding: 6,
+                callback: function (value) { return minutesToHm(value); }
+              },
+              title: { display: true, text: '首次封板时间（北京时间，09:25–15:00）', color: '#8b949e', font: { size: 11 } }
+            },
+            y: {
+              reverse: false,
+              border: { color: '#30363d' },
+              grid: { display: false },
+              ticks: {
+                color: '#c9d1d9',
+                font: { size: 11 },
+                autoSkip: false,
+                padding: 4
+              }
+            }
+          }
+        }
+      });
+      setChartView('chart');
+      renderChartLegend(entries);
+    } catch (err) {
+      /* 图表不可用时不抛错、不输出 console，仅显示占位文本 */
+      destroyChart();
+      setChartView('fallback');
+    }
+  }
+
+  /* ============================================================
+   * 自选
+   * ============================================================ */
+  function renderWatchNote(data) {
+    var node = $('watchNote');
+    if (!node) return;
+    var d = data || {};
+    var dataTime = isoHms(d.refreshed_at) || NA_TEXT;
+    var phase = str(d.market_phase);
+    var isTrading = phase === 'trading' || phase === 'auction';
+    node.textContent = (isTrading ? '实时行情' : '非交易时段 · 展示最近快照') +
+      ' · 数据时间 ' + dataTime + '（北京时间）';
+  }
+
+  function quoteStatus(quote) {
+    if (!quote || quote.ok === false) return { text: NA_TEXT, cls: 'na', extra: '' };
+    if (quote.is_limit_up === true || quote.in_limit_up_pool === true) {
+      var streak = num(quote.streak);
+      return { text: '涨停', cls: 'limit-up', extra: (streak !== null && streak >= 2) ? streak + '连板' : '' };
+    }
+    if (quote.is_limit_down === true) return { text: '跌停', cls: 'limit-down', extra: '' };
+    return { text: '普通', cls: 'normal', extra: '' };
+  }
+
+  function renderWatch(data) {
+    var tbody = $('watchTbody');
+    var wrap = $('watchTableWrap');
+    var empty = $('watchEmpty');
+    if (!tbody || !wrap || !empty) return;
+
+    var rows = (data && Array.isArray(data.watchlist)) ? data.watchlist : [];
+    var byCode = {};
+    for (var i = 0; i < rows.length; i++) {
+      var row = rows[i];
+      var rowCode = normCode(row && row.code);
+      if (rowCode && !byCode[rowCode]) byCode[rowCode] = row;
+    }
+    var codes = state.watch.slice();
+    for (var j = 0; j < rows.length; j++) {
+      var extraCode = normCode(rows[j] && rows[j].code);
+      if (extraCode && codes.indexOf(extraCode) < 0) codes.push(extraCode);
+    }
+
+    if (!codes.length) {
+      tbody.innerHTML = '';
+      wrap.classList.add('hidden');
+      empty.classList.remove('hidden');
+      renderWatchNote(data);
+      return;
+    }
+    wrap.classList.remove('hidden');
+    empty.classList.add('hidden');
+
+    var html = '';
+    for (var k = 0; k < codes.length; k++) {
+      var code = codes[k];
+      var quote = byCode[code];
+      var name = str(quote && quote.name) || NA_TEXT;
+      var price = num(quote && quote.price);
+      var pct = num(quote && quote.pct);
+      var status = quoteStatus(quote);
+      html += '<tr class="watched" data-watch-code="' + esc(code) + '">' +
+        '<td class="mono">' + esc(code) + '</td>' +
+        '<td>' + (str(quote && quote.name)
+          ? '<div class="cell-stock"><span class="sname">' + esc(name) + '</span></div>'
+          : naHtml(quote && quote.ok === false ? '行情获取失败' : NA_TITLE)) + '</td>' +
+        '<td class="num mono">' + (price === null ? naHtml() : esc(price.toFixed(2))) + '</td>' +
+        '<td class="num mono">' + (pct === null
+          ? naHtml()
+          : '<span class="' + pctClass(pct) + '">' + esc(fmtPct(pct, true)) + '</span>') + '</td>' +
+        '<td><span class="status-badge ' + status.cls + '">' + esc(status.text) + '</span>' +
+        (status.extra ? '<span class="status-extra">' + esc(status.extra) + '</span>' : '') + '</td>' +
+        '<td class="num"><button type="button" class="remove-btn" data-remove-code="' + esc(code) + '">移除</button></td>' +
+        '</tr>';
+    }
+    tbody.innerHTML = html;
+    renderWatchNote(data);
+  }
+
+  /* ============================================================
+   * 页脚
+   * ============================================================ */
+  function renderFooter(data) {
+    var foot = $('pageFoot');
+    if (!foot) return;
+    var d = data || {};
+    var parts = [];
+    var serverTime = isoHms(d.generated_at);
+    parts.push('<span>服务器时间 ' + esc(serverTime || NA_TEXT) + '（北京时间）</span>');
+
+    var concepts = d.concepts;
+    if (concepts && typeof concepts === 'object') {
+      var loaded = num(concepts.loaded);
+      var total = num(concepts.total);
+      if (concepts.ready === true) {
+        parts.push('<span>概念映射：已完成' + (total !== null ? '（' + Math.round(total) + ' 个概念）' : '') + '</span>');
+      } else if (loaded !== null && total !== null) {
+        parts.push('<span>概念映射：构建中 ' + Math.round(loaded) + '/' + Math.round(total) + '</span>');
+      } else if (str(concepts.note)) {
+        parts.push('<span>概念映射：' + esc(str(concepts.note)) + '</span>');
+      }
+    }
+    if (str(d.log_file)) parts.push('<span>数据文件 ' + esc(d.log_file) + '</span>');
+    if (Array.isArray(d.warnings) && d.warnings.length) {
+      var warnText = d.warnings.slice(0, 3).map(function (w) { return String(w); }).join('；');
+      parts.push('<span class="foot-warn">警告：' + esc(warnText) + '</span>');
+    }
+    foot.innerHTML = parts.join('');
+  }
+
+  /* ============================================================
+   * 告警
+   * ============================================================ */
+  function buildLimitUpMap(data) {
+    var map = {};
+    function addStock(stock) {
+      if (!stock || typeof stock !== 'object') return;
+      var code = normCode(stock.code);
+      if (!code) return;
+      var streak = num(stock.streak);
+      if (!map[code]) {
+        map[code] = {
+          code: code,
+          name: str(stock.name) || code,
+          streak: streak,
+          isWatch: stock.is_watch === true
+        };
+      } else {
+        if (streak !== null && (map[code].streak === null || streak > map[code].streak)) {
+          map[code].streak = streak;
+        }
+        if (stock.is_watch === true) map[code].isWatch = true;
+      }
+    }
+    var themes = (data && Array.isArray(data.themes)) ? data.themes : [];
+    for (var i = 0; i < themes.length; i++) {
+      var stocks = themes[i] && Array.isArray(themes[i].stocks) ? themes[i].stocks : [];
+      for (var j = 0; j < stocks.length; j++) addStock(stocks[j]);
+    }
+    var ladder = (data && Array.isArray(data.ladder)) ? data.ladder : [];
+    for (var g = 0; g < ladder.length; g++) {
+      var groupStocks = ladder[g] && Array.isArray(ladder[g].stocks) ? ladder[g].stocks : [];
+      for (var h = 0; h < groupStocks.length; h++) addStock(groupStocks[h]);
+    }
+    return map;
+  }
+
+  function brokenCodeSet(data) {
+    var set = {};
+    var rows = (data && Array.isArray(data.broken)) ? data.broken : [];
+    for (var i = 0; i < rows.length; i++) {
+      var code = normCode(rows[i] && rows[i].code);
+      if (code) set[code] = rows[i];
+    }
+    return set;
+  }
+
+  function runAlertCheck(prev, curr) {
+    if (!prev || !curr) return;
+    /* 跨交易日不比较，避免新一天开盘出现误报 */
+    var prevDate = str(prev.trade_date);
+    var currDate = str(curr.trade_date);
+    if (prevDate && currDate && prevDate !== currDate) return;
+
+    var prevPool = buildLimitUpMap(prev);
+    var currPool = buildLimitUpMap(curr);
+    var prevBroken = brokenCodeSet(prev);
+    var currBroken = brokenCodeSet(curr);
+
+    var watchSet = {};
+    for (var w = 0; w < state.watch.length; w++) watchSet[state.watch[w]] = true;
+    for (var pc in prevPool) {
+      if (Object.prototype.hasOwnProperty.call(prevPool, pc) && prevPool[pc].isWatch) watchSet[pc] = true;
+    }
+    for (var cc in currPool) {
+      if (Object.prototype.hasOwnProperty.call(currPool, cc) && currPool[cc].isWatch) watchSet[cc] = true;
+    }
+
+    var events = [];
+
+    /* (a) 自选股新封涨停：上一份不在涨停池，本份在 */
+    for (var code in currPool) {
+      if (!Object.prototype.hasOwnProperty.call(currPool, code)) continue;
+      if (!watchSet[code]) continue;
+      if (Object.prototype.hasOwnProperty.call(prevPool, code)) continue;
+      var sealed = currPool[code];
+      events.push({
+        key: 'seal:' + code,
+        type: 'seal',
+        codes: [code],
+        text: '自选股新封涨停：' + sealed.name + '（' + code + '）' +
+          (sealed.streak !== null ? sealed.streak + '连板' : ''),
+        notifyTitle: '自选股涨停提醒'
+      });
+    }
+
+    /* (b) 连板数 >= 3 的股票炸板：上一份在涨停池，本份出现在炸板池 */
+    for (var prevCode in prevPool) {
+      if (!Object.prototype.hasOwnProperty.call(prevPool, prevCode)) continue;
+      var prevStock = prevPool[prevCode];
+      if (prevStock.streak === null || prevStock.streak < 3) continue;
+      if (!Object.prototype.hasOwnProperty.call(currBroken, prevCode)) continue;
+      var brokenRow = currBroken[prevCode];
+      var breakTime = normalizeHms(brokenRow && brokenRow.break_time);
+      events.push({
+        key: 'break:' + prevCode,
+        type: 'break',
+        codes: [prevCode],
+        text: '高位连板炸板：' + prevStock.name + '（' + prevCode + '）' + prevStock.streak + '连板' +
+          (breakTime ? '，' + breakTime + ' 炸板' : ''),
+        notifyTitle: '高位连板炸板提醒'
+      });
+    }
+
+    /* (c) 炸板率上穿 40% */
+    var prevRate = num(prev.stats && prev.stats.broken_rate);
+    var currRate = num(curr.stats && curr.stats.broken_rate);
+    if (prevRate !== null && currRate !== null &&
+        prevRate < BROKEN_RATE_THRESHOLD && currRate >= BROKEN_RATE_THRESHOLD) {
+      events.push({
+        key: 'rate40',
+        type: 'rate',
+        codes: [],
+        text: '炸板率上穿 ' + Math.round(BROKEN_RATE_THRESHOLD * 100) + '%：' +
+          (prevRate * 100).toFixed(2) + '% → ' + (currRate * 100).toFixed(2) + '%',
+        notifyTitle: '情绪预警：炸板率上穿 40%'
+      });
+    }
+
+    for (var e = 0; e < events.length; e++) {
+      if (allowAlert(events[e].key)) fireAlert(events[e]);
+    }
+  }
+
+  function fireAlert(event) {
+    state.alerts.unshift({
+      time: bjNowHms(),
+      type: event.type,
+      text: event.text
+    });
+    if (state.alerts.length > MAX_ALERTS) state.alerts.length = MAX_ALERTS;
+    renderAlertStrip();
+    flashRows(event.codes);
+    if (event.type === 'rate') flashPanel();
+    fireNotification(event.notifyTitle, event.text, event.key);
+  }
+
+  function flashRows(codes) {
+    if (!codes || !codes.length) return;
+    for (var i = 0; i < codes.length; i++) {
+      var selector = '[data-stock-code="' + codes[i] + '"],' +
+        '[data-broken-code="' + codes[i] + '"],' +
+        '[data-watch-code="' + codes[i] + '"]';
+      var nodes;
+      try { nodes = document.querySelectorAll(selector); } catch (e) { nodes = []; }
+      for (var j = 0; j < nodes.length; j++) {
+        (function (node) {
+          node.classList.remove('flash');
+          /* 触发重排，让动画可以重复播放 */
+          void node.offsetWidth;
+          node.classList.add('flash');
+          setTimeout(function () { node.classList.remove('flash'); }, 3800);
+        })(nodes[j]);
+      }
+    }
+  }
+
+  function flashPanel() {
+    var targets = [$('statCardBrokenRate'), $('brokenSection')];
+    for (var i = 0; i < targets.length; i++) {
+      var node = targets[i];
+      if (!node) continue;
+      (function (el) {
+        el.classList.remove('flash-panel');
+        void el.offsetWidth;
+        el.classList.add('flash-panel');
+        setTimeout(function () { el.classList.remove('flash-panel'); }, 3800);
+      })(node);
+    }
+  }
+
+  function renderAlertStrip() {
+    var strip = $('alertStrip');
+    if (!strip) return;
+    if (!state.alerts.length) {
+      strip.innerHTML = '';
+      strip.classList.add('hidden');
+      return;
+    }
+    var html = '<div class="alert-head"><span class="alert-title">告警 · ' +
+      esc(state.alerts.length) + ' 条</span>' +
+      '<button type="button" class="link-btn" id="alertClearBtn">清空</button></div>';
+    for (var i = 0; i < state.alerts.length; i++) {
+      var alert = state.alerts[i];
+      var tag = alert.type === 'seal' ? '自选封板' : (alert.type === 'break' ? '高位炸板' : '情绪预警');
+      var cls = alert.type === 'seal' ? 'tseal' : (alert.type === 'break' ? 'tbreak' : 'trate');
+      html += '<div class="alert-item ' + cls + '">' +
+        '<span class="a-tag">' + esc(tag) + '</span>' +
+        '<span class="a-time">' + esc(alert.time) + '</span>' +
+        '<span class="a-text">' + esc(alert.text) + '</span>' +
+        '</div>';
+    }
+    strip.innerHTML = html;
+    strip.classList.remove('hidden');
+  }
+
+  /* ============================================================
+   * 数据获取与轮询
+   * ============================================================ */
+  function snapshotUrl(force, codes) {
+    var base = force ? API_REFRESH : API_SNAPSHOT;
+    if (codes && codes.length) {
+      return base + '?watch=' + encodeURIComponent(codes.join(','));
+    }
+    return base;
+  }
+
+  function fetchWithTimeout(url, timeoutMs) {
+    var controller = null;
+    var timer = null;
+    var options = { cache: 'no-store', headers: { 'Accept': 'application/json' } };
+    try {
+      if (typeof window.AbortController !== 'undefined') {
+        controller = new window.AbortController();
+        options.signal = controller.signal;
+        timer = setTimeout(function () {
+          try { controller.abort(); } catch (e) { /* 忽略 */ }
+        }, timeoutMs);
+      }
+    } catch (e) { controller = null; }
+    return window.fetch(url, options).then(function (response) {
+      if (timer) clearTimeout(timer);
+      return response;
+    }, function (error) {
+      if (timer) clearTimeout(timer);
+      throw error;
+    });
+  }
+
+  function currentPollMs() {
+    if (isBjTradingHours()) return POLL_TRADING_MS;
+    var data = state.data;
+    if (data && (data.market_phase === 'trading' || data.market_phase === 'auction')) {
+      return POLL_TRADING_MS;
+    }
+    return POLL_IDLE_MS;
+  }
+
+  /* 首次加载尚无数据时快速重试（后端首次拉取 akshare 最多可能等 20s） */
+  function nextDelayMs() {
+    if (!state.data && state.lastFetchError) return 10000;
+    return currentPollMs();
+  }
+
+  function scheduleNext() {
+    if (state.timer) clearTimeout(state.timer);
+    state.timer = setTimeout(function () {
+      state.timer = null;
+      loadSnapshot(false);
+    }, nextDelayMs());
+  }
+
+  function handleSnapshot(data) {
+    var previous = state.data;
+    renderAll(data);
+    state.data = data;
+    if (previous) {
+      try { runAlertCheck(previous, data); } catch (e) { /* 告警逻辑失败不应中断页面 */ }
+    }
+  }
+
+  function loadSnapshot(force) {
+    if (state.fetching) return;
+    state.fetching = true;
+    setBusy(true);
+    var codes = state.watch.slice();
+    var url = snapshotUrl(force, codes);
+    var promise;
+    if (force) {
+      promise = fetchWithTimeout(url, 45000).then(function (response) {
+        if (response.ok) return response;
+        /* 老后端/测试桩可能没有 /api/refresh，自动回退到 /api/snapshot */
+        if (response.status === 404 || response.status === 405) {
+          return fetchWithTimeout(snapshotUrl(false, codes), 15000);
+        }
+        return response;
+      });
+    } else {
+      /* 首次加载后端可能等待初始拉取（最长约 20s），放宽到 30s */
+      promise = fetchWithTimeout(url, state.data ? 15000 : 30000);
+    }
+    promise.then(function (response) {
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      return response.json();
+    }).then(function (data) {
+      if (!data || typeof data !== 'object' || Array.isArray(data)) {
+        throw new Error('返回格式异常');
+      }
+      state.lastFetchError = null;
+      hideErrorBanner();
+      if (data.ok === false) {
+        showErrorBanner('接口返回异常（ok=false），已保留可用数据');
+      }
+      try {
+        handleSnapshot(data);
+      } catch (renderError) {
+        showErrorBanner('页面渲染异常，已保留上次数据');
+      }
+    }).catch(function (error) {
+      state.lastFetchError = error;
+      var message = (error && error.name === 'AbortError')
+        ? '请求超时'
+        : ((error && error.message) ? error.message : '网络错误');
+      showErrorBanner('接口请求失败：' + message +
+        (state.data ? '（已保留上次数据）' : '（暂无数据）'));
+    }).then(function () {
+      state.fetching = false;
+      setBusy(false);
+      updateRefreshBadge();
+      scheduleNext();
+    });
+  }
+
+  /* ============================================================
+   * 自选交互
+   * ============================================================ */
+  function applyWatchHighlights() {
+    var stockNodes = document.querySelectorAll('[data-stock-code]');
+    for (var i = 0; i < stockNodes.length; i++) {
+      var node = stockNodes[i];
+      var code = normCode(node.getAttribute('data-stock-code'));
+      node.classList.toggle('watched', isWatched(code));
+      if (code) node.title = watchRowTitle(code, node.getAttribute('data-stock-name') || '');
+    }
+    var brokenNodes = document.querySelectorAll('[data-broken-code]');
+    for (var j = 0; j < brokenNodes.length; j++) {
+      var row = brokenNodes[j];
+      var rowCode = normCode(row.getAttribute('data-broken-code'));
+      row.classList.toggle('watched', isWatched(rowCode));
+      if (rowCode) row.title = watchRowTitle(rowCode, row.getAttribute('data-broken-name') || '');
+    }
+  }
+
+  function queueRefetch() {
+    if (refetchTimer) clearTimeout(refetchTimer);
+    refetchTimer = setTimeout(function () {
+      refetchTimer = null;
+      if (!state.fetching) loadSnapshot(false);
+    }, 400);
+  }
+
+  function addWatchCodes(codes, sourceLabel) {
+    var added = [];
+    for (var i = 0; i < codes.length; i++) {
+      var code = normCode(codes[i]);
+      if (!code) continue;
+      if (state.watch.indexOf(code) >= 0) continue;
+      if (state.watch.length >= MAX_WATCH) break;
+      state.watch.push(code);
+      added.push(code);
+    }
+    if (!added.length) {
+      showToast('没有新增自选（可能已存在）', 'warn');
+      return false;
+    }
+    saveWatch();
+    applyWatchHighlights();
+    renderWatch(state.data);
+    showToast('已加入自选：' + added.join('、'), 'ok');
+    queueRefetch();
+    return true;
+  }
+
+  function removeWatch(code) {
+    var index = state.watch.indexOf(code);
+    if (index < 0) return;
+    state.watch.splice(index, 1);
+    saveWatch();
+    applyWatchHighlights();
+    renderWatch(state.data);
+    showToast('已移出自选：' + code, 'ok');
+  }
+
+  function toggleWatch(code) {
+    if (!code) return;
+    if (isWatched(code)) removeWatch(code);
+    else addWatchCodes([code]);
+  }
+
+  function onAddWatchInput() {
+    var input = $('watchInput');
+    if (!input) return;
+    var matches = String(input.value || '').match(/\d{6}/g) || [];
+    if (!matches.length) {
+      showToast('请输入 6 位股票代码，可用逗号/空格/换行分隔', 'warn');
+      return;
+    }
+    if (addWatchCodes(matches)) input.value = '';
+  }
+
+  function onDocumentClick(event) {
+    var target = event.target;
+    if (!target || typeof target.closest !== 'function') return;
+
+    var clearBtn = target.closest('#alertClearBtn');
+    if (clearBtn) {
+      state.alerts = [];
+      renderAlertStrip();
+      return;
+    }
+
+    var removeBtn = target.closest('[data-remove-code]');
+    if (removeBtn) {
+      var removeCode = normCode(removeBtn.getAttribute('data-remove-code'));
+      if (removeCode) removeWatch(removeCode);
+      return;
+    }
+
+    var stockNode = target.closest('[data-stock-code]');
+    if (stockNode) {
+      var stockCode = normCode(stockNode.getAttribute('data-stock-code'));
+      if (stockCode) toggleWatch(stockCode);
+      return;
+    }
+
+    var brokenNode = target.closest('[data-broken-code]');
+    if (brokenNode) {
+      var brokenCode = normCode(brokenNode.getAttribute('data-broken-code'));
+      if (brokenCode) toggleWatch(brokenCode);
+    }
+  }
+
+  /* ============================================================
+   * 全量渲染 / 初始化
+   * ============================================================ */
+  function renderAll(data) {
+    renderHeader(data);
+    renderThemes(data);
+    renderLadder(data);
+    renderBroken(data);
+    renderTimeline(data);
+    renderWatch(data);
+    renderFooter(data);
+  }
+
+  function bindEvents() {
+    var refreshBtn = $('refreshBtn');
+    if (refreshBtn) refreshBtn.addEventListener('click', function () { loadSnapshot(true); });
+
+    var notifyBtn = $('notifyBtn');
+    if (notifyBtn) notifyBtn.addEventListener('click', requestNotifyPermission);
+
+    var addBtn = $('watchAddBtn');
+    if (addBtn) addBtn.addEventListener('click', onAddWatchInput);
+
+    var watchInput = $('watchInput');
+    if (watchInput) {
+      watchInput.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          onAddWatchInput();
+        }
+      });
+    }
+
+    document.addEventListener('click', onDocumentClick);
+
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden && !state.fetching && state.data) {
+        loadSnapshot(false);
+      }
+    });
+
+    window.addEventListener('load', function () {
+      if (state.chartNeedsRetry && typeof window.Chart !== 'undefined' && state.data) {
+        try { renderTimeline(state.data); } catch (e) { /* 忽略 */ }
+      }
+    });
+  }
+
+  function init() {
+    state.watch = loadWatch();
+    state.dedupe = loadDedupe();
+    state.alerts = [];
+    bindEvents();
+    updateNotifyBtn();
+    renderAll({});
+    loadSnapshot(false);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>
+</body>
+</html>

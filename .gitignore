@@ -1,0 +1,16 @@
+# Node / npm
+node_modules/
+*.tgz
+
+# macOS
+.DS_Store
+
+# Python backend runtime artifacts (dashboard/)
+dashboard/.venv/
+dashboard/__pycache__/
+dashboard/**/__pycache__/
+dashboard/.pytest_cache/
+dashboard/data/
+dashboard/deploy/.env
+dashboard/deploy/.htpasswd
+dashboard/deploy/*.log
