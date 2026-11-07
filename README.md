@@ -1,5 +1,9 @@
 # dsh-limitup-widget — A 股涨停直播浮窗（DeepSeek Harness 插件）
 
+[![npm version](https://img.shields.io/npm/v/dsh-limitup-widget)](https://www.npmjs.com/package/dsh-limitup-widget)
+[![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
+[![DSH](https://img.shields.io/badge/DSH-%3E%3D0.2.0--rc.2-4D6BFE)](https://github.com/deepseek-ai/deepseek-harness)
+
 > A frame-wide floating **A-share limit-up card** for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`dsh`).
 > 在 DSH 桌面 / Web UI 的 **frame 级浮动层**（`shell.overlay`）里常驻一张深色小卡片：实时显示 A 股涨停 / 炸板 /
 > 跌停家数、炸板率、连板高度、昨日涨停溢价、热门题材与自选股；Host 侧提供**同源代理**，并可探活 / 自动拉起
@@ -92,20 +96,21 @@
 在 DSH 的 **设置 → 插件**（市场 / Discover）里搜索 `dsh-limitup-widget` 一键安装。
 桌面版 profile 由 Electron 应用管理，请通过设置界面安装，不要手动改桌面 profile。
 
-**方式 B：CLI（Web / 自定义 profile）**
+**方式 B：CLI / npm（已发布 【0.2.1】）**
 
 ```sh
-# 从 npm（如果已发布）
+# 安装到当前 profile（不用全局安装）
 dsh plugin add dsh-limitup-widget
-# 或显式指定 profile
-dsh plugin --profile web add dsh-limitup-widget
+dsh plugin --profile web add dsh-limitup-widget         # 或显式指定 profile
 
-# 从 GitHub 源码（npm 未发布时同样可用）
+# 从 GitHub 源码（等价，npm 不可用时）
 dsh plugin --profile web add github:LusJourney/dsh-limitup-widget
 
-# 从本地 tarball
-dsh plugin --profile web add /absolute/path/to/dsh-limitup-widget-0.2.0.tgz
+# 从本地 tarball / Release 附件
+dsh plugin --profile web add /absolute/path/to/dsh-limitup-widget-0.2.1.tgz
 ```
+
+npm 包页面：<https://www.npmjs.com/package/dsh-limitup-widget>
 
 安装后**重启 DSH 应用**（新 bundle 才会进入正在运行的 roster），右下角应出现「涨停直播」卡片。
 
